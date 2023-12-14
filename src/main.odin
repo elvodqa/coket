@@ -19,7 +19,7 @@ main :: proc() {
 	game.update = update
 	game.render = render
 	game.on_resize = resized
-
+	// sex
 	run_game(&game)
 
 }
