@@ -45,7 +45,7 @@ render :: proc(dt: f32) {
 	gfx.clear_screen({0.0, 0.0, 1.0, 1.0})
 
 	gfx.batch_begin(&spritebatch)
-	gfx.batch_draw_texture(&spritebatch, texture, {0.0, 0.0}, {2, 2}, {1, 1, 1, 1})
+	gfx.batch_draw_texture(&spritebatch, texture, {0.0, 0.0}, {100, 100}, {1, 1, 1, 1})
 	gfx.batch_end(&spritebatch)
 
 }

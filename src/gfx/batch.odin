@@ -121,10 +121,13 @@ init :: proc() -> (batch: SpriteBatch) {
     return batch
 }
 
-default_translation := glm.identity(glm.mat4x4) * glm.mat4Translate(glm.vec3{0.0, 0.0, 0.0}) * glm.mat4Scale(glm.vec3{1.0, 1.0, 1.0}) * glm.mat4Rotate(glm.vec3{0.0, 0.0, 1.0}, 0.0) * glm.mat4Rotate(glm.vec3{0.0, 1.0, 0.0}, 0.0) * glm.mat4Rotate(glm.vec3{1.0, 0.0, 0.0}, 0.0) * glm.mat4Translate(glm.vec3{0.0, 0.0, 0.0})
 
-batch_begin :: proc(batch: ^SpriteBatch, translation: glm.mat4x4 = default_translation) {
+
+batch_begin :: proc(batch: ^SpriteBatch) {
     gl.UseProgram(batch.shader.id)
+    default_translation := glm.identity(glm.mat4x4) * glm.mat4Translate(glm.vec3{0.0, 0.0, 0.0}) * glm.mat4Scale(glm.vec3{1.0, 1.0, 1.0}) * glm.mat4Rotate(glm.vec3{0.0, 0.0, 1.0}, 0.0) * glm.mat4Rotate(glm.vec3{0.0, 1.0, 0.0}, 0.0) * glm.mat4Rotate(glm.vec3{1.0, 0.0, 0.0}, 0.0) * glm.mat4Translate(glm.vec3{0.0, 0.0, 0.0})
+    gl.UniformMatrix4fv(batch.shader.uniforms["translation"].location, 1, false, &default_translation[0, 0])
+
     gl.BindVertexArray(batch.vao)
     gl.BindBuffer(gl.ARRAY_BUFFER, batch.vbo)
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, batch.ebo)
@@ -201,16 +204,17 @@ out vec3 Normal;
 out vec2 TexCoord;
 out vec4 Color;
 
-uniform mat4 model;
-uniform mat4 view;
-uniform mat4 projection;
+//uniform mat4 model;
+//uniform mat4 view;
+//uniform mat4 projection;
+uniform mat4 translation;
 
 void main() {
-    FragPos = vec3(model * vec4(position, 1.0));
-    Normal = mat3(transpose(inverse(model))) * normal;
+    FragPos = vec3(translation * vec4(position, 1.0));
+    Normal = mat3(transpose(inverse(translation))) * normal;
     TexCoord = tex_coord;
     Color = color;
-    gl_Position = projection * view * vec4(FragPos, 1.0);
+    gl_Position = translation * vec4(position, 1.0);
 }
 `
 

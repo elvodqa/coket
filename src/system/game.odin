@@ -66,10 +66,8 @@ run_game :: proc(game: ^Game) {
 		}
 	}
 
-	gl_context := SDL.GL_CreateContext(window)
-	SDL.GL_MakeCurrent(window, gl_context)
-
-	gl.load_up_to(4, 1, SDL.gl_set_proc_address)
+	
+	
 
 
 	SDL.GL_SetAttribute(SDL.GLattr.CONTEXT_MAJOR_VERSION, 4)
@@ -77,7 +75,10 @@ run_game :: proc(game: ^Game) {
 	SDL.GL_SetAttribute(SDL.GLattr.CONTEXT_PROFILE_MASK, cast(i32)SDL.GLprofile.CORE)
 	SDL.GL_SetAttribute(SDL.GLattr.CONTEXT_FLAGS, cast(i32)SDL.GLcontextFlag.FORWARD_COMPATIBLE_FLAG)
 
+	gl_context := SDL.GL_CreateContext(window)
+	SDL.GL_MakeCurrent(window, gl_context)
 
+	gl.load_up_to(4, 1, SDL.gl_set_proc_address)
 
     // refresh limit shit
 	frameStart, frameTime: u32
@@ -115,6 +116,7 @@ run_game :: proc(game: ^Game) {
 				if e.key.repeat == 0 { // Check if the event is a repeat
 					game.last_key_pressed = e.key.keysym.scancode
 				}
+				
 			// key up
 			case .KEYUP:
 				game.last_key_released = e.key.keysym.scancode
