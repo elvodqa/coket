@@ -19,6 +19,7 @@ Texture :: struct {
     width: i32,
     height: i32,
     channels: i32,
+    ref_count: i32,
 }
 
 Shader :: struct {
@@ -100,84 +101,6 @@ load_texture :: proc(texturePath: string) -> (texture: Texture) {
     return texture
 }
 
-SpriteBatch :: struct {
-    shader: Shader,
-    meshes: [dynamic]Mesh,
-    textures: [dynamic]Texture,
-    vao: u32,
-    vbo: u32,
-    ebo: u32,
-    vertexCount: i32,
-    indexCount: i32,
-}
-
-init :: proc() -> (batch: SpriteBatch) {
-    gl.GenVertexArrays(1, &batch.vao)
-    gl.GenBuffers(1, &batch.vbo)
-    gl.GenBuffers(1, &batch.ebo)
-    ok : b32
-    batch.shader = load_shader_source(DEFAULT_VERTEX_SHADER, DEFAULT_FRAGMENT_SHADER)
-
-    return batch
-}
-
-
-
-batch_begin :: proc(batch: ^SpriteBatch) {
-    gl.UseProgram(batch.shader.id)
-    default_translation := glm.identity(glm.mat4x4) * glm.mat4Translate(glm.vec3{0.0, 0.0, 0.0}) * glm.mat4Scale(glm.vec3{1.0, 1.0, 1.0}) * glm.mat4Rotate(glm.vec3{0.0, 0.0, 1.0}, 0.0) * glm.mat4Rotate(glm.vec3{0.0, 1.0, 0.0}, 0.0) * glm.mat4Rotate(glm.vec3{1.0, 0.0, 0.0}, 0.0) * glm.mat4Translate(glm.vec3{0.0, 0.0, 0.0})
-    gl.UniformMatrix4fv(batch.shader.uniforms["translation"].location, 1, false, &default_translation[0, 0])
-
-    gl.BindVertexArray(batch.vao)
-    gl.BindBuffer(gl.ARRAY_BUFFER, batch.vbo)
-    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, batch.ebo)
-}
-
-batch_end :: proc(batch: ^SpriteBatch) {
-    gl.BindVertexArray(0)
-    gl.UseProgram(0)
-
-    batch.vertexCount = 0
-    batch.indexCount = 0
-}
-
-batch_draw_texture :: proc(batch: ^SpriteBatch, texture: Texture, position: glm.vec2, size: glm.vec2, color: glm.vec4) {
-    vertices: [dynamic]Vertex
-
-    append(&vertices, Vertex{position= glm.vec3{position.x, position.y, 0.0}, tex_coord= glm.vec2{0.0, 0.0}, color= color})
-    append(&vertices, Vertex{position= glm.vec3{position.x + size.x, position.y, 0.0}, tex_coord= glm.vec2{1.0, 0.0}, color= color})
-    append(&vertices, Vertex{position= glm.vec3{position.x + size.x, position.y + size.y, 0.0}, tex_coord= glm.vec2{1.0, 1.0}, color= color})
-    append(&vertices, Vertex{position= glm.vec3{position.x, position.y + size.y, 0.0}, tex_coord= glm.vec2{0.0, 1.0}, color= color})
-   
-
-    indices: [dynamic]u32
-
-    append(&indices, 0)
-    append(&indices, 1)
-    append(&indices, 2)
-    append(&indices, 2)
-    append(&indices, 3)
-    append(&indices, 0)
-
-    
-
-    gl.BindTexture(gl.TEXTURE_2D, texture.id)
-    gl.BufferData(gl.ARRAY_BUFFER, len(vertices) * size_of(Vertex), &vertices[0], gl.STATIC_DRAW)
-    gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(indices) * size_of(u32), &indices[0], gl.STATIC_DRAW)
-    gl.DrawElements(gl.TRIANGLES, cast(i32)len(indices), gl.UNSIGNED_INT, nil)
-
-    gl.BindTexture(gl.TEXTURE_2D, 0)
-
-    batch.vertexCount += cast(i32)len(vertices)
-    batch.indexCount += cast(i32)len(indices)
-    
-    append(&batch.textures, texture)
-
-    append(&batch.meshes, Mesh{vertices= vertices, indices= indices, textures= {texture}})
-
-    //fmt.printf("Batched texture: %s\n", texture.path)
-}
-
 clear_screen :: proc(color: glm.vec4 = {0.0, 0.0, 0.0, 1.0}) {
     gl.ClearColor(color.r, color.g, color.b, color.a)
     gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
@@ -191,47 +114,143 @@ color_from_rgba :: proc(r, g, b, a: f32) -> (color: glm.vec4) {
     return color
 }
 
-DEFAULT_VERTEX_SHADER :: `
-#version 330 core
 
-layout (location = 0) in vec3 position;
-layout (location = 1) in vec3 normal;
-layout (location = 2) in vec2 tex_coord;
-layout (location = 3) in vec4 color;
+VERTEX_SHADER :: 
+`
+#version 400 core
 
-out vec3 FragPos;
-out vec3 Normal;
-out vec2 TexCoord;
-out vec4 Color;
+// Vertex attributes for position and color
+layout(location = 0) in vec2 in_position;
+layout(location = 1) in vec2 in_uv;
+layout(location = 2) in vec4 in_color;
 
-//uniform mat4 model;
-//uniform mat4 view;
-//uniform mat4 projection;
-uniform mat4 translation;
+// uniform will contain the world matrix.
+uniform mat3 screenTransform;
 
-void main() {
-    FragPos = vec3(translation * vec4(position, 1.0));
-    Normal = mat3(transpose(inverse(translation))) * normal;
-    TexCoord = tex_coord;
-    Color = color;
-    gl_Position = translation * vec4(position, 1.0);
+// output variables
+out vec2 uv;
+out vec4 color;
+
+void main(void)
+{
+	//transform the vector
+	vec3 transformed = screenTransform * vec3(in_position, 1);
+	gl_Position = vec4(transformed, 1);
+	
+	// pass through uv and color
+	uv = in_uv;
+	color = in_color;
 }
 `
 
-DEFAULT_FRAGMENT_SHADER :: `
-#version 330 core
+FRAGMENT_SHADER :: 
+`
+#version 400 core
 
-in vec3 FragPos;
-in vec3 Normal;
-in vec2 TexCoord;
-in vec4 Color;
+in vec2 uv;
+in vec4 color;
 
-out vec4 FragColor;
+uniform sampler2D tex;
 
-uniform sampler2D texture_diffuse1;
+out vec4 fragColor;
 
-void main() {
-    FragColor = texture(texture_diffuse1, TexCoord) * Color;
+void main(void)
+{
+	// texelFetch gets a pixel by its index in the texture instead of 0-1 spacing
+	fragColor = texelFetch(tex, ivec2(uv), 0) * color;
 }
 `
 
+Vertex2dUVColor :: struct {
+    position: glm.vec2,
+    tex_coord: glm.vec2,
+    color: glm.vec4,
+}
+
+SpriteBatch :: struct {
+    vertexBuffer: [dynamic]Vertex2dUVColor,
+    vbo: u32,
+    shader: Shader,
+    texture: ^Texture,
+    screenTransform: glm.mat3,
+}
+
+
+new_spritebatch :: proc(screenSize: glm.vec2) -> (batcher: SpriteBatch) {
+    batcher.shader = load_shader_source(VERTEX_SHADER, FRAGMENT_SHADER)
+
+    gl.GenBuffers(1, &batcher.vbo)
+    gl.BindBuffer(gl.ARRAY_BUFFER, batcher.vbo)
+   
+    gl.VertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, size_of(Vertex2dUVColor), 0)
+    gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, size_of(Vertex2dUVColor), size_of(glm.vec2))
+    gl.VertexAttribPointer(2, 4, gl.FLOAT, gl.FALSE, size_of(Vertex2dUVColor), size_of(glm.vec4))
+    gl.BindBuffer(gl.ARRAY_BUFFER, 0)
+
+    batch_set_size(&batcher, screenSize)
+
+    return batcher
+}
+
+batch_draw :: proc(batch: ^SpriteBatch, texture: ^Texture, destRec: glm.vec4, srcRec: glm.vec4, color:glm.vec4) {
+    if batch.texture != texture {
+        batch_flush(batch)
+
+        texture.ref_count += 1
+        if batch.texture != nil {
+            batch.texture.ref_count -= 1
+            if batch.texture.ref_count == 0 {
+                gl.DeleteTextures(1, &batch.texture.id)
+                //fmt.printf("Deleted texture: %s\n", batch.texture.path)
+            }
+        }
+
+        batch.texture = texture
+    }
+
+    append(&batch.vertexBuffer, Vertex2dUVColor{glm.vec2{destRec.x, destRec.y}, glm.vec2{srcRec.x, srcRec.y}, color})
+    append(&batch.vertexBuffer, Vertex2dUVColor{glm.vec2{destRec.x + destRec.z, destRec.y}, glm.vec2{srcRec.z, srcRec.y}, color})
+    append(&batch.vertexBuffer, Vertex2dUVColor{glm.vec2{destRec.x, destRec.y + destRec.w}, glm.vec2{srcRec.x, srcRec.w}, color})
+    append(&batch.vertexBuffer, Vertex2dUVColor{glm.vec2{destRec.x + destRec.z, destRec.y}, glm.vec2{srcRec.z, srcRec.y}, color})
+    append(&batch.vertexBuffer, Vertex2dUVColor{glm.vec2{destRec.x, destRec.y + destRec.w}, glm.vec2{srcRec.x, srcRec.w}, color})
+    append(&batch.vertexBuffer, Vertex2dUVColor{glm.vec2{destRec.x + destRec.z, destRec.y + destRec.w}, glm.vec2{srcRec.z, srcRec.w}, color})
+
+}
+
+batch_flush :: proc(batcher: ^SpriteBatch) {
+    if len(batcher.vertexBuffer) == 0 || batcher.texture == nil {
+        return
+    }
+
+    gl.UseProgram(batcher.shader.id)
+
+    gl.ActiveTexture(gl.TEXTURE0)
+    gl.BindTexture(gl.TEXTURE_2D, batcher.texture.id)
+    gl.Uniform1i(batcher.shader.uniforms["tex"].location, 0)
+
+    gl.BindBuffer(gl.ARRAY_BUFFER, batcher.vbo)
+    gl.BufferData(gl.ARRAY_BUFFER, size_of(Vertex2dUVColor) * len(batcher.vertexBuffer), &batcher.vertexBuffer[0], gl.STATIC_DRAW)
+    gl.BindBuffer(gl.ARRAY_BUFFER, 0)
+
+    gl.UniformMatrix3fv(batcher.shader.uniforms["screenTransform"].location, 1, gl.FALSE, &batcher.screenTransform[0, 0])
+
+    gl.EnableVertexAttribArray(0)
+    gl.EnableVertexAttribArray(1)
+    gl.EnableVertexAttribArray(2)
+
+    gl.DrawArrays(gl.TRIANGLES, 0, cast(i32)len(batcher.vertexBuffer))
+
+    gl.DisableVertexAttribArray(0)
+    gl.DisableVertexAttribArray(1)
+    gl.DisableVertexAttribArray(2)
+
+    batcher.vertexBuffer = {}
+}
+
+// set screen size for batcher
+batch_set_size :: proc(batcher: ^SpriteBatch, screenSize: glm.vec2) {
+    batcher.screenTransform[0][0] = 2.0 / screenSize.x
+    batcher.screenTransform[1][1] = 2.0 / screenSize.y
+    batcher.screenTransform[2][0] = -1.0
+    batcher.screenTransform[2][1] = -1.0
+}

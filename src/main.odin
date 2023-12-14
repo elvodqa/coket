@@ -25,8 +25,9 @@ main :: proc() {
 }
 
 load :: proc() {
-	texture = gfx.load_texture("assets/plank.jpeg")
-	spritebatch = gfx.init()
+	texture = gfx.load_texture("assets/texture.png")
+	texture.ref_count += 1
+	spritebatch = gfx.new_spritebatch({1400, 800})
 }
 
 update :: proc(game: ^system.Game, dt: f32) {
@@ -44,9 +45,8 @@ update :: proc(game: ^system.Game, dt: f32) {
 render :: proc(dt: f32) {
 	gfx.clear_screen({0.0, 0.0, 1.0, 1.0})
 
-	gfx.batch_begin(&spritebatch)
-	gfx.batch_draw_texture(&spritebatch, texture, {0.0, 0.0}, {100, 100}, {1, 1, 1, 1})
-	gfx.batch_end(&spritebatch)
+	gfx.batch_draw(&spritebatch, &texture, {0, 0, 100, 100}, {0.0, 0.0, 1.0, 1.0}, {1, 1, 1, 1})
+	gfx.batch_flush(&spritebatch)
 
 }
 
